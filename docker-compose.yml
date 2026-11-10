@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  mqpss-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mqpss_emergency_system
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PROJECT_NAME=MQPSS - Hospital Emergency Triage & Multilevel Scheduling
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/queues/stats"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+

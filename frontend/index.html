@@ -1,0 +1,1658 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>MQPSS — Hệ Thống Phân Loại & Lập Lịch Bệnh Nhân Cấp Cứu Thông Minh</title>
+  
+  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS Configuration (BEFORE Tailwind CDN) -->
+  <script>
+    window.tailwind = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+          }
+        }
+      }
+    };
+  </script>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    body {
+      background-color: #0B0F19;
+      color: #F8FAFC;
+      font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+      -webkit-font-smoothing: antialiased;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    @keyframes pulseAlert {
+      0%, 100% { border-color: rgba(239, 68, 68, 0.8); }
+      50% { border-color: rgba(239, 68, 68, 0.2); }
+    }
+    .pulse-danger-border {
+      animation: pulseAlert 1.5s infinite ease-in-out;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, ::before, ::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+
+<body class="bg-[#0B0F19] text-slate-100 min-h-dvh flex flex-col font-sans selection:bg-slate-700 selection:text-white">
+
+  <!-- ==================== TOP EMERGENCY BANNER (PREEMPTION / ESI-1 ALERT) ==================== -->
+  <div id="emergency-banner" class="hidden bg-red-950/90 border-b border-red-500/60 px-4 py-2.5 flex items-center justify-between text-xs sticky top-0 z-50 backdrop-blur-md">
+    <div class="flex items-center space-x-3">
+      <span class="flex h-2.5 w-2.5 relative">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+      </span>
+      <div>
+        <span class="font-bold text-red-200 uppercase tracking-wider">Cảnh Báo Lâm Sàng: Ca Nguy Kịch ESI-1 Vào Viện</span>
+        <span class="text-slate-500 ml-2 hidden sm:inline">|</span>
+        <span class="text-red-300 ml-2 hidden sm:inline" id="emergency-banner-desc">Đã kích hoạt ngắt phiên (Preemption) điều động bác sĩ hồi sức lập tức.</span>
+      </div>
+    </div>
+    <div class="flex items-center space-x-2">
+      <button onclick="playAlarmChime()" class="bg-red-900/60 hover:bg-red-800 text-red-200 border border-red-700/60 px-2.5 py-1 rounded-md text-[11px] font-semibold cursor-pointer transition flex items-center space-x-1" aria-label="Nghe còi báo động">
+        <i data-lucide="volume-2" class="w-3.5 h-3.5"></i>
+        <span>Còi</span>
+      </button>
+      <button onclick="dismissEmergencyBanner()" class="bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 px-2.5 py-1 rounded-md text-[11px] font-semibold cursor-pointer transition" aria-label="Đã tiếp nhận ca nguy kịch">
+        Đã tiếp nhận
+      </button>
+    </div>
+  </div>
+
+  <!-- ==================== MAIN APPLICATION HEADER ==================== -->
+  <header class="bg-slate-900/95 border-b border-slate-800 sticky top-0 z-40 backdrop-blur-md px-4 sm:px-6 py-2.5 shadow-sm">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      
+      <!-- BRAND & METADATA -->
+      <div class="flex items-center space-x-3">
+        <div class="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-cyan-400 font-mono font-bold text-sm shadow-inner">
+          M
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-sm sm:text-base font-bold text-slate-100 tracking-tight">MQPSS Clinical Suite</h1>
+            <span class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-cyan-300 border border-slate-700 font-semibold">v1.0 OS-Triage</span>
+          </div>
+          <p class="text-[11px] text-slate-400 hidden sm:block">Hệ Thống Phân Loại & Lập Lịch Bệnh Nhân Cấp Cứu · GVHD: ThS. Lê Văn Phong</p>
+        </div>
+      </div>
+
+      <!-- CENTER: NAVIGATION TABS (SEGMENTED CONTROL) -->
+      <nav class="flex items-center space-x-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+        <button onclick="switchTab('queues')" id="tab-btn-queues" class="nav-tab active px-3 py-1.5 rounded-md font-semibold transition cursor-pointer bg-slate-800 text-white shadow-sm flex items-center space-x-1.5" aria-label="Tab Hàng Đợi 5 Tầng">
+          <i data-lucide="kanban" class="w-3.5 h-3.5 text-cyan-400"></i>
+          <span>Hàng Đợi</span>
+          <span id="badge-total-waiting" class="bg-slate-900 text-slate-300 font-mono text-[10px] px-1.5 py-0.2 rounded-full border border-slate-700">0</span>
+        </button>
+        <button onclick="switchTab('doctors')" id="tab-btn-doctors" class="nav-tab px-3 py-1.5 rounded-md font-semibold transition cursor-pointer text-slate-400 hover:text-slate-200 flex items-center space-x-1.5" aria-label="Tab Trạm Bác Sĩ">
+          <i data-lucide="stethoscope" class="w-3.5 h-3.5"></i>
+          <span>Bác Sĩ</span>
+        </button>
+        <button onclick="switchTab('intake')" id="tab-btn-intake" class="nav-tab px-3 py-1.5 rounded-md font-semibold transition cursor-pointer text-slate-400 hover:text-slate-200 flex items-center space-x-1.5" aria-label="Tab Tiếp Đón Triage">
+          <i data-lucide="clipboard-plus" class="w-3.5 h-3.5"></i>
+          <span>Tiếp Đón</span>
+        </button>
+        <button onclick="switchTab('dashboard')" id="tab-btn-dashboard" class="nav-tab px-3 py-1.5 rounded-md font-semibold transition cursor-pointer text-slate-400 hover:text-slate-200 flex items-center space-x-1.5" aria-label="Tab Giám Sát và KPI">
+          <i data-lucide="bar-chart-3" class="w-3.5 h-3.5"></i>
+          <span>Giám Sát & KPI</span>
+        </button>
+        <button onclick="switchTab('audit')" id="tab-btn-audit" class="nav-tab px-3 py-1.5 rounded-md font-semibold transition cursor-pointer text-slate-400 hover:text-slate-200 flex items-center space-x-1.5" aria-label="Tab Nhật Ký Điều Phối">
+          <i data-lucide="terminal" class="w-3.5 h-3.5"></i>
+          <span>Nhật Ký</span>
+        </button>
+      </nav>
+
+      <!-- RIGHT: TELEMETRY & CONTROLS -->
+      <div class="flex items-center space-x-2">
+        <!-- LIVE ECG TELEMETRY WIDGET -->
+        <div class="hidden xl:flex items-center space-x-2 bg-slate-950 border border-slate-800 px-2.5 py-1 rounded-lg">
+          <div class="text-[10px] font-mono text-right leading-none">
+            <span class="text-slate-500 block">ECG NSR</span>
+            <span class="text-emerald-400 font-bold">78 BPM</span>
+          </div>
+          <canvas id="ecg-canvas" width="80" height="20" class="rounded bg-slate-900 border border-slate-800"></canvas>
+        </div>
+
+        <!-- CLOCK -->
+        <div class="hidden lg:flex items-center space-x-1 px-2.5 py-1.5 bg-slate-950 border border-slate-800 rounded-lg text-xs font-mono text-slate-300">
+          <span id="hospital-clock" class="tabular-nums">00:00:00</span>
+        </div>
+
+        <!-- SIMULATION ACTION BAR -->
+        <div class="flex items-center space-x-1">
+          <button onclick="toggleSound()" id="sound-btn" class="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 transition cursor-pointer" title="Bật/Tắt chuông báo động" aria-label="Bật hoặc tắt âm thanh">
+            <i data-lucide="volume-2" id="sound-icon" class="w-4 h-4 text-emerald-400"></i>
+          </button>
+          
+          <button onclick="seedDemo()" class="px-2.5 py-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 hover:text-white transition cursor-pointer flex items-center space-x-1" title="Nạp 8 ca lâm sàng mẫu" aria-label="Nạp 8 ca mẫu">
+            <i data-lucide="database" class="w-3.5 h-3.5 text-cyan-400"></i>
+            <span class="hidden sm:inline">Nạp 8 Ca</span>
+          </button>
+
+          <button onclick="triggerMCISurge()" class="px-2.5 py-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/60 border border-red-800/60 text-xs text-red-300 hover:text-white transition cursor-pointer flex items-center space-x-1" title="Mô phỏng thảm họa hàng loạt (MCI)" aria-label="Kích hoạt thảm họa MCI">
+            <i data-lucide="alert-octagon" class="w-3.5 h-3.5 text-red-400"></i>
+            <span class="hidden sm:inline">Báo Động MCI</span>
+          </button>
+
+          <button onclick="fastForwardTime(30)" class="px-2.5 py-1.5 rounded-lg bg-amber-950/40 hover:bg-amber-900/60 border border-amber-800/60 text-xs text-amber-300 hover:text-white transition cursor-pointer flex items-center space-x-1" title="Tua nhanh thời gian chờ +30 phút" aria-label="Tua nhanh 30 phút">
+            <i data-lucide="fast-forward" class="w-3.5 h-3.5 text-amber-400"></i>
+            <span class="hidden sm:inline">+30p Aging</span>
+          </button>
+
+          <button onclick="resetSystem()" class="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-rose-400 transition cursor-pointer" title="Làm sạch toàn bộ hệ thống" aria-label="Reset toàn bộ hệ thống">
+            <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+          </button>
+
+          <a href="/api/v1/export/csv" download class="p-1.5 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 transition cursor-pointer" title="Xuất báo cáo CSV UTF-8" aria-label="Xuất file báo cáo CSV">
+            <i data-lucide="download" class="w-4 h-4"></i>
+          </a>
+
+          <!-- WEBSOCKET PILL -->
+          <div id="ws-badge" class="flex items-center space-x-1 px-2 py-1 bg-slate-950 border border-slate-800 rounded-lg text-[10px] font-mono text-emerald-400">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="ws-status-text">LIVE</span>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ==================== PERSISTENT EXECUTIVE KPI BAR ==================== -->
+  <section class="border-b border-slate-800/80 bg-slate-900/60 px-4 sm:px-6 py-3">
+    <div class="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+      <div class="bg-slate-950/70 border border-slate-800 p-2.5 rounded-lg flex items-center justify-between">
+        <div>
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Tổng Đang Chờ</span>
+          <span id="kpi-total-waiting" class="text-xl font-extrabold text-white font-mono tabular-nums">0</span>
+          <span class="text-[11px] text-slate-400 font-medium"> ca</span>
+        </div>
+        <div class="text-right text-[10px] text-slate-500 font-mono">
+          <span>Q1-Q4: </span>
+          <span id="kpi-ed-waiting" class="text-slate-300 font-bold">0</span>
+        </div>
+      </div>
+
+      <div class="bg-slate-950/70 border border-slate-800 p-2.5 rounded-lg flex items-center justify-between">
+        <div>
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Chờ Trung Bình</span>
+          <span id="kpi-avg-wait" class="text-xl font-extrabold text-amber-400 font-mono tabular-nums">0.0</span>
+          <span class="text-[11px] text-slate-400 font-medium"> phút</span>
+        </div>
+        <div class="text-right text-[10px] text-emerald-400 font-mono">
+          <span>Ngưỡng &lt;15p</span>
+        </div>
+      </div>
+
+      <div class="bg-slate-950/70 border border-slate-800 p-2.5 rounded-lg flex items-center justify-between">
+        <div>
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Bác Sĩ Trực</span>
+          <span id="kpi-doctors" class="text-xl font-extrabold text-cyan-400 font-mono tabular-nums">5/5</span>
+          <span class="text-[11px] text-slate-400 font-medium"> trực</span>
+        </div>
+        <div class="text-right text-[10px] text-emerald-400 font-mono">
+          <span>Sẵn sàng</span>
+        </div>
+      </div>
+
+      <div class="bg-slate-950/70 border border-slate-800 p-2.5 rounded-lg flex items-center justify-between">
+        <div>
+          <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Cảnh Báo Quá Hạn</span>
+          <span id="kpi-starvation" class="text-xl font-extrabold text-emerald-400 font-mono tabular-nums">0</span>
+          <span class="text-[11px] text-slate-400 font-medium"> ca</span>
+        </div>
+        <div class="text-right text-[10px] text-cyan-400 font-mono">
+          <span>Dynamic Aging</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== MAIN CONTENT WRAPPER ==================== -->
+  <main class="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full space-y-6">
+
+    <!-- ============================================================ -->
+    <!-- TAB 1 (DEFAULT ACTIVE): HÀNG ĐỢI 5 TẦNG (MULTILEVEL QUEUES)  -->
+    <!-- ============================================================ -->
+    <section id="view-queues" class="space-y-4">
+      
+      <!-- SEARCH & CONTROLS -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 shadow-sm">
+        <div class="flex items-center space-x-2 flex-1 min-w-[240px] max-w-md">
+          <div class="relative w-full">
+            <i data-lucide="search" class="w-4 h-4 text-slate-500 absolute left-3 top-2.5"></i>
+            <input type="text" id="queue-search" oninput="filterQueues()" placeholder="Tìm bệnh nhân theo tên hoặc mã BN..." class="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-cyan-500">
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <button onclick="filterStarvationOnly()" id="btn-starv-filter" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 cursor-pointer transition flex items-center space-x-1.5" aria-label="Lọc ca nguy cơ Starvation">
+            <i data-lucide="clock-alert" class="w-3.5 h-3.5 text-amber-400"></i>
+            <span>Chỉ Ca Nguy Cơ Starvation</span>
+          </button>
+          
+          <button onclick="triggerAgingManually()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 cursor-pointer transition flex items-center space-x-1.5" aria-label="Quét Dynamic Aging">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-cyan-400"></i>
+            <span>Quét Dynamic Aging</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 5-COLUMN LANES -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3.5">
+        
+        <!-- QUEUE 1: ESI-1 -->
+        <div class="bg-slate-900 border border-red-900/40 rounded-xl p-3 flex flex-col min-h-[560px] shadow-sm">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
+            <div>
+              <span class="text-[10px] font-bold text-red-400 uppercase tracking-wider block">Queue 1 · Preemption</span>
+              <h3 class="text-xs font-bold text-slate-100">Nguy Kịch Tức Thì</h3>
+            </div>
+            <span id="q1-count" class="bg-red-950 text-red-300 text-xs px-2 py-0.5 rounded-md font-mono font-bold border border-red-800">0</span>
+          </div>
+          <span class="text-[10px] text-slate-500 mb-2 block font-mono">Mục tiêu: 0 phút (Cấp cứu ngay)</span>
+          <div id="q1-list" class="space-y-2 flex-1 overflow-y-auto custom-scroll pr-1">
+            <div class="text-xs text-slate-600 text-center py-12">Không có ca nguy kịch</div>
+          </div>
+        </div>
+
+        <!-- QUEUE 2: ESI-2 -->
+        <div class="bg-slate-900 border border-orange-900/40 rounded-xl p-3 flex flex-col min-h-[560px] shadow-sm">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
+            <div>
+              <span class="text-[10px] font-bold text-orange-400 uppercase tracking-wider block">Queue 2 · Max-Heap</span>
+              <h3 class="text-xs font-bold text-slate-100">Rất Cấp Khẩn</h3>
+            </div>
+            <span id="q2-count" class="bg-orange-950 text-orange-300 text-xs px-2 py-0.5 rounded-md font-mono font-bold border border-orange-800">0</span>
+          </div>
+          <span class="text-[10px] text-slate-500 mb-2 block font-mono">Mục tiêu: &lt; 15 phút</span>
+          <div id="q2-list" class="space-y-2 flex-1 overflow-y-auto custom-scroll pr-1">
+            <div class="text-xs text-slate-600 text-center py-12">Hàng đợi trống</div>
+          </div>
+        </div>
+
+        <!-- QUEUE 3: ESI-3 -->
+        <div class="bg-slate-900 border border-amber-900/40 rounded-xl p-3 flex flex-col min-h-[560px] shadow-sm">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
+            <div>
+              <span class="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">Queue 3 · Round Robin</span>
+              <h3 class="text-xs font-bold text-slate-100">Cấp Tính (Đa CLS)</h3>
+            </div>
+            <span id="q3-count" class="bg-amber-950 text-amber-300 text-xs px-2 py-0.5 rounded-md font-mono font-bold border border-amber-800">0</span>
+          </div>
+          <span class="text-[10px] text-slate-500 mb-2 block font-mono">Mục tiêu: &lt; 60 phút (q=30p)</span>
+          <div id="q3-list" class="space-y-2 flex-1 overflow-y-auto custom-scroll pr-1">
+            <div class="text-xs text-slate-600 text-center py-12">Hàng đợi trống</div>
+          </div>
+        </div>
+
+        <!-- QUEUE 4: ESI-4 -->
+        <div class="bg-slate-900 border border-emerald-900/40 rounded-xl p-3 flex flex-col min-h-[560px] shadow-sm">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
+            <div>
+              <span class="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">Queue 4 · FCFS Chuẩn</span>
+              <h3 class="text-xs font-bold text-slate-100">Ít Cấp (1 CLS)</h3>
+            </div>
+            <span id="q4-count" class="bg-emerald-950 text-emerald-300 text-xs px-2 py-0.5 rounded-md font-mono font-bold border border-emerald-800">0</span>
+          </div>
+          <span class="text-[10px] text-slate-500 mb-2 block font-mono">Mục tiêu: &lt; 120 phút</span>
+          <div id="q4-list" class="space-y-2 flex-1 overflow-y-auto custom-scroll pr-1">
+            <div class="text-xs text-slate-600 text-center py-12">Hàng đợi trống</div>
+          </div>
+        </div>
+
+        <!-- QUEUE 5: ESI-5 -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col min-h-[560px] shadow-sm">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2 mb-2">
+            <div>
+              <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Queue 5 · Ngoại Trú</span>
+              <h3 class="text-xs font-bold text-slate-100">Điều Hướng Phòng Khám</h3>
+            </div>
+            <span id="q5-count" class="bg-slate-800 text-slate-300 text-xs px-2 py-0.5 rounded-md font-mono font-bold border border-slate-700">0</span>
+          </div>
+          <span class="text-[10px] text-slate-500 mb-2 block font-mono">Không chiếm giường cấp cứu</span>
+          <div id="q5-list" class="space-y-2 flex-1 overflow-y-auto custom-scroll pr-1">
+            <div class="text-xs text-slate-600 text-center py-12">Hàng đợi trống</div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- TAB 2: TRẠM BÁC SĨ (DOCTOR WORKSTATION & I/O WAIT)            -->
+    <!-- ============================================================ -->
+    <section id="view-doctors" class="hidden space-y-4">
+      
+      <div class="flex items-center justify-between bg-slate-900 border border-slate-800 p-3.5 rounded-xl shadow-sm">
+        <div>
+          <h2 class="text-sm font-bold text-slate-100 flex items-center space-x-2">
+            <i data-lucide="stethoscope" class="w-4 h-4 text-cyan-400"></i>
+            <span>Trạm Làm Việc Bác Sĩ Cấp Cứu (Least-Loaded Dispatcher)</span>
+          </h2>
+          <p class="text-xs text-slate-400">Tự động phân bổ ca ưu tiên cao nhất cho bác sĩ có ít tải công việc nhất</p>
+        </div>
+      </div>
+
+      <!-- 5 DOCTORS GRID -->
+      <div id="doctors-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Injected via JS -->
+      </div>
+
+      <!-- I/O LAB WAIT POOL -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 shadow-sm">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+          <span class="text-xs font-bold uppercase tracking-wider text-purple-300 flex items-center space-x-2">
+            <i data-lucide="flask-conical" class="w-4 h-4 text-purple-400"></i>
+            <span>Phòng Cận Lâm Sàng: X-Quang, CT, Troponin-I (I/O Wait Pool)</span>
+          </span>
+          <span id="lab-count" class="bg-purple-950 text-purple-300 text-xs px-2 py-0.5 rounded font-mono font-bold border border-purple-800">0 ca</span>
+        </div>
+        <div id="lab-list" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div class="text-xs text-slate-500 py-6 col-span-3 text-center">Không có bệnh nhân nào đang chờ kết quả xét nghiệm</div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- TAB 3: TIẾP ĐÓN & TRIAGE (CLINICAL INTAKE DESK)               -->
+    <!-- ============================================================ -->
+    <section id="view-intake" class="hidden space-y-4">
+      
+      <!-- QUICK CLINICAL PRESETS -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 shadow-sm">
+        <div class="flex items-center space-x-2 text-xs font-semibold text-slate-400">
+          <i data-lucide="zap" class="w-4 h-4 text-cyan-400"></i>
+          <span>Ca Mẫu Nhanh:</span>
+        </div>
+        <div class="flex flex-wrap items-center gap-1.5">
+          <button onclick="applyPreset(1)" class="px-2.5 py-1 rounded-md text-xs font-semibold bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800/80 cursor-pointer transition" aria-label="Áp dụng ca ESI-1">
+            L1: Ngưng thở
+          </button>
+          <button onclick="applyPreset(2)" class="px-2.5 py-1 rounded-md text-xs font-semibold bg-orange-950/60 hover:bg-orange-900 text-orange-300 border border-orange-800/80 cursor-pointer transition" aria-label="Áp dụng ca ESI-2">
+            L2: Đau ngực SpO2 thấp
+          </button>
+          <button onclick="applyPreset(3)" class="px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-950/60 hover:bg-amber-900 text-amber-300 border border-amber-800/80 cursor-pointer transition" aria-label="Áp dụng ca ESI-3">
+            L3: Đau bụng sốt
+          </button>
+          <button onclick="applyPreset(4)" class="px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-950/60 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/80 cursor-pointer transition" aria-label="Áp dụng ca ESI-4">
+            L4: Gãy ngón tay
+          </button>
+          <button onclick="applyPreset(5)" class="px-2.5 py-1 rounded-md text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 cursor-pointer transition" aria-label="Áp dụng ca ESI-5">
+            L5: Tái khám cấp toa
+          </button>
+        </div>
+      </div>
+
+      <!-- GRID 2 CỘT: FORM NHẬP LIỆU & AI TRIAGE PREVIEW -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        
+        <!-- LEFT: FORM NHẬP LIỆU (7 CỘT) -->
+        <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 shadow-sm">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+            <h2 class="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center space-x-2">
+              <i data-lucide="user-check" class="w-4 h-4 text-cyan-400"></i>
+              <span>1. Thông Tin Bệnh Nhân & Bệnh Sử</span>
+            </h2>
+            <span class="text-[11px] font-mono text-slate-500">Phím tắt: <kbd class="bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 text-slate-300">Ctrl+Enter</kbd></span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div>
+              <label for="inp-pid" class="block font-medium text-slate-400 mb-1">Mã Bệnh Nhân (ID)</label>
+              <input type="text" id="inp-pid" value="BN-2026-101" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 font-mono text-cyan-300 focus:outline-none focus:border-cyan-500 transition">
+            </div>
+            <div class="sm:col-span-2">
+              <label for="inp-name" class="block font-medium text-slate-400 mb-1">Họ Và Tên Bệnh Nhân</label>
+              <input type="text" id="inp-name" value="Nguyễn Hoàng Nam" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 transition">
+            </div>
+            <div>
+              <label for="inp-age" class="block font-medium text-slate-400 mb-1">Tuổi</label>
+              <input type="number" id="inp-age" value="56" oninput="liveUpdateAIPreview()" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 tabular-nums focus:outline-none focus:border-cyan-500 transition">
+            </div>
+            <div>
+              <label for="inp-gender" class="block font-medium text-slate-400 mb-1">Giới Tính</label>
+              <select id="inp-gender" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500 transition">
+                <option value="male">Nam</option>
+                <option value="female">Nữ</option>
+                <option value="other">Khác</option>
+              </select>
+            </div>
+            <div>
+              <label for="inp-avpu" class="block font-medium text-slate-400 mb-1">Thang Đo Tri Giác (AVPU)</label>
+              <select id="inp-avpu" onchange="liveUpdateAIPreview()" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 font-semibold focus:outline-none focus:border-cyan-500 transition">
+                <option value="A">A — Tỉnh táo (Alert)</option>
+                <option value="V">V — Đáp ứng lời nói (Voice)</option>
+                <option value="P">P — Đáp ứng đau (Pain)</option>
+                <option value="U" class="text-red-400 font-bold">U — Hôn mê (Unresponsive) [ESI-1]</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label for="inp-complaint" class="block text-xs font-medium text-slate-400 mb-1">Lý Do Vào Viện / Triệu Chứng Chính (Chief Complaint)</label>
+            <textarea id="inp-complaint" rows="2" oninput="liveUpdateAIPreview()" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-100 focus:outline-none focus:border-cyan-500 transition" placeholder="Ví dụ: Đau tức ngực trái dữ dội lan vai, khó thở, vã mồ hôi...">Đau tức ngực trái dữ dội lan vai trái, vã mồ hôi, khó thở</textarea>
+          </div>
+
+          <!-- VITAL SIGNS WITH DANGER THRESHOLD DETECTION -->
+          <div class="border-t border-slate-800 pt-3 space-y-3">
+            <div class="flex items-center justify-between">
+              <h2 class="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center space-x-2">
+                <i data-lucide="activity" class="w-4 h-4 text-emerald-400"></i>
+                <span>2. Dấu Hiệu Sinh Tồn & Chỉ Số Sốc</span>
+              </h2>
+              <span id="badge-shock-index" class="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-950 text-slate-300 border border-slate-800">
+                Shock Index: 0.74 (Bình thường)
+              </span>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+              <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800" id="card-hr">
+                <label for="inp-hr" class="block text-[11px] text-slate-400 mb-1 font-medium flex justify-between">
+                  <span>Mạch (HR)</span>
+                  <span class="text-slate-500 font-mono">bpm</span>
+                </label>
+                <input type="number" id="inp-hr" value="115" oninput="liveUpdateAIPreview()" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 font-mono font-bold text-slate-100 tabular-nums focus:outline-none focus:border-cyan-500">
+              </div>
+
+              <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800" id="card-bp">
+                <label class="block text-[11px] text-slate-400 mb-1 font-medium flex justify-between">
+                  <span>Huyết Áp (BP)</span>
+                  <span class="text-slate-500 font-mono">mmHg</span>
+                </label>
+                <div class="flex items-center space-x-1">
+                  <input type="number" id="inp-sbp" value="155" oninput="liveUpdateAIPreview()" placeholder="Thu" aria-label="Tâm thu" class="w-1/2 bg-slate-900 border border-slate-700 rounded px-1.5 py-1 font-mono font-bold text-slate-100 tabular-nums focus:outline-none focus:border-cyan-500">
+                  <span class="text-slate-600">/</span>
+                  <input type="number" id="inp-dbp" value="95" oninput="liveUpdateAIPreview()" placeholder="Trương" aria-label="Tâm trương" class="w-1/2 bg-slate-900 border border-slate-700 rounded px-1.5 py-1 font-mono font-bold text-slate-100 tabular-nums focus:outline-none focus:border-cyan-500">
+                </div>
+              </div>
+
+              <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800" id="card-spo2">
+                <label for="inp-spo2" class="block text-[11px] text-slate-400 mb-1 font-medium flex justify-between">
+                  <span>SpO2</span>
+                  <span id="warn-spo2" class="text-orange-400 font-mono font-bold">91.0%</span>
+                </label>
+                <input type="number" id="inp-spo2" value="91.0" step="0.5" oninput="liveUpdateAIPreview()" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 font-mono font-bold text-slate-100 tabular-nums focus:outline-none focus:border-cyan-500">
+              </div>
+
+              <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800" id="card-rr">
+                <label for="inp-rr" class="block text-[11px] text-slate-400 mb-1 font-medium flex justify-between">
+                  <span>Nhịp Thở</span>
+                  <span class="text-slate-500 font-mono">l/p</span>
+                </label>
+                <input type="number" id="inp-rr" value="24" oninput="liveUpdateAIPreview()" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 font-mono font-bold text-slate-100 tabular-nums focus:outline-none focus:border-cyan-500">
+              </div>
+
+              <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                <label for="inp-temp" class="block text-[11px] text-slate-400 mb-1 font-medium">Nhiệt Độ (°C)</label>
+                <input type="number" id="inp-temp" value="37.2" step="0.1" oninput="liveUpdateAIPreview()" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 font-mono font-bold text-slate-100 tabular-nums focus:outline-none focus:border-cyan-500">
+              </div>
+
+              <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                <label for="inp-pain" class="block text-[11px] text-slate-400 mb-1 font-medium">Thang Đau (0-10)</label>
+                <input type="number" id="inp-pain" value="8" min="0" max="10" oninput="liveUpdateAIPreview()" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 font-mono font-bold text-slate-100 tabular-nums focus:outline-none focus:border-cyan-500">
+              </div>
+
+              <div class="col-span-2 bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                <label for="inp-comorb" class="block text-[11px] text-slate-400 mb-1 font-medium">Bệnh Lý Nền (phân tách dấu phẩy)</label>
+                <input type="text" id="inp-comorb" value="tim_mach, tang_huyet_ap" oninput="liveUpdateAIPreview()" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
+              </div>
+            </div>
+          </div>
+
+          <div class="pt-2">
+            <button onclick="submitPatientIntake()" class="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 px-4 rounded-lg transition cursor-pointer flex items-center justify-center space-x-2 shadow" aria-label="Gửi hồ sơ tiếp nhận bệnh nhân">
+              <i data-lucide="check-circle" class="w-4 h-4"></i>
+              <span>Tiếp Nhận & Xếp Vào Hàng Đợi (Ctrl+Enter)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- RIGHT: AI TRIAGE PREVIEW & NURSE OVERRIDE (5 CỘT) -->
+        <div class="lg:col-span-5 space-y-4">
+          <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 sticky top-16 shadow-sm">
+            
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-1.5">
+                <i data-lucide="brain-circuit" class="w-4 h-4 text-cyan-400"></i>
+                <span>Phân Tích AI Triage (ESI v4)</span>
+              </span>
+              <span id="preview-badge" class="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-orange-950 text-orange-400 border border-orange-800">
+                Gợi ý ESI-2
+              </span>
+            </div>
+
+            <!-- ESI PREVIEW CARD -->
+            <div id="triage-card" class="bg-slate-950 border border-orange-500/50 rounded-lg p-4 space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-xl font-extrabold text-orange-400 tracking-tight" id="card-esi-title">ESI LEVEL 2 (CAM)</h3>
+                  <p class="text-xs text-slate-300 font-medium" id="card-esi-sub">Rất Cấp Khẩn — Chờ tối đa &lt; 15 phút</p>
+                </div>
+                <div class="w-9 h-9 rounded-lg bg-orange-950 border border-orange-700/60 flex items-center justify-center text-orange-400">
+                  <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+                </div>
+              </div>
+
+              <!-- SCORES BREAKDOWN -->
+              <div class="bg-slate-900 rounded border border-slate-800 p-2 text-xs flex justify-between items-center font-mono">
+                <span class="text-slate-400">Điểm Ưu Tiên Toán Học:</span>
+                <span id="card-preview-score" class="font-bold text-amber-400 tabular-nums">78.5 / 100</span>
+              </div>
+
+              <!-- EXPLAINABILITY -->
+              <div class="border-t border-slate-800 pt-2.5 space-y-1.5">
+                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center space-x-1">
+                  <i data-lucide="info" class="w-3.5 h-3.5 text-cyan-400"></i>
+                  <span>Lý Do Lâm Sàng Đề Xuất (Explainable AI):</span>
+                </p>
+                <ul id="card-explanations" class="text-xs text-slate-300 space-y-1">
+                  <!-- Injected via JS -->
+                </ul>
+              </div>
+            </div>
+
+            <!-- NURSE OVERRIDE -->
+            <div class="bg-slate-950 border border-slate-800 rounded-lg p-3.5 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
+                  <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-slate-400"></i>
+                  <span>Quyền Ghi Đè Điều Dưỡng (Override)</span>
+                </span>
+                <span class="text-[10px] text-slate-500 font-mono">Audit Log</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Nếu đánh giá lâm sàng thực tế khác với AI, chọn ESI thay thế:</p>
+              <div class="grid grid-cols-5 gap-1 text-center text-xs font-bold">
+                <button onclick="setOverrideEsi(1)" id="btn-ov-1" class="py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 cursor-pointer transition" aria-label="Override ESI 1">L1</button>
+                <button onclick="setOverrideEsi(2)" id="btn-ov-2" class="py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 cursor-pointer transition" aria-label="Override ESI 2">L2</button>
+                <button onclick="setOverrideEsi(3)" id="btn-ov-3" class="py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 cursor-pointer transition" aria-label="Override ESI 3">L3</button>
+                <button onclick="setOverrideEsi(4)" id="btn-ov-4" class="py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 cursor-pointer transition" aria-label="Override ESI 4">L4</button>
+                <button onclick="setOverrideEsi(5)" id="btn-ov-5" class="py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 cursor-pointer transition" aria-label="Override ESI 5">L5</button>
+              </div>
+              <input type="text" id="override-reason" placeholder="Lý do ghi đè ESI lâm sàng..." class="w-full bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-100 focus:outline-none focus:border-cyan-500">
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- TAB 4: GIÁM SÁT & KPI THỜI GIAN THỰC (EXECUTIVE ANALYTICS)    -->
+    <!-- ============================================================ -->
+    <section id="view-dashboard" class="hidden space-y-5">
+      
+      <!-- CHARTS -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-sm">
+          <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center space-x-2">
+            <i data-lucide="pie-chart" class="w-4 h-4 text-rose-400"></i>
+            <span>Phân Bổ Bệnh Nhân Theo Từng Hàng Đợi ESI</span>
+          </h3>
+          <div class="h-56 flex items-center justify-center">
+            <canvas id="chart-esi-dist"></canvas>
+          </div>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl shadow-sm">
+          <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center space-x-2">
+            <i data-lucide="bar-chart-2" class="w-4 h-4 text-cyan-400"></i>
+            <span>Khối Lượng Xử Lý Bác Sĩ (Workload Balancing)</span>
+          </h3>
+          <div class="h-56 flex items-center justify-center">
+            <canvas id="chart-doc-workload"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- BENCHMARK TABLE & PUBLICATION FIGURES -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4 shadow-sm">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center space-x-2">
+            <i data-lucide="flask-conical" class="w-4 h-4 text-cyan-400"></i>
+            <span>Kết Quả Thực Nghiệm Đối Chứng SimPy DES (48 Giờ / 527 Bệnh Nhân)</span>
+          </h3>
+          <span class="text-xs font-mono text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-800 px-2.5 py-0.5 rounded">
+            Đối chứng định lượng
+          </span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left text-slate-300">
+            <thead class="text-[11px] uppercase bg-slate-950 text-slate-400 border-b border-slate-800">
+              <tr>
+                <th class="py-2 px-3">Giải Thuật Định Thời</th>
+                <th class="py-2 px-3">Chờ ESI-1 (Đỏ)</th>
+                <th class="py-2 px-3">Chờ ESI-2 (Cam)</th>
+                <th class="py-2 px-3">Chờ Tối Đa (Max)</th>
+                <th class="py-2 px-3">Starvation ESI-1</th>
+                <th class="py-2 px-3">Starvation Toàn Viện</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800 font-mono">
+              <tr class="hover:bg-slate-800/30">
+                <td class="py-2 px-3 font-sans font-medium text-slate-400">FCFS Tiêu Chuẩn</td>
+                <td class="py-2 px-3 text-red-400 font-bold tabular-nums">24.88p ⚠️</td>
+                <td class="py-2 px-3 tabular-nums">17.54p</td>
+                <td class="py-2 px-3 tabular-nums">95.14p</td>
+                <td class="py-2 px-3 text-red-400 font-bold tabular-nums">72.2% ❌</td>
+                <td class="py-2 px-3 tabular-nums">13.85%</td>
+              </tr>
+              <tr class="hover:bg-slate-800/30">
+                <td class="py-2 px-3 font-sans font-medium text-orange-400">Pure Priority (Không Aging)</td>
+                <td class="py-2 px-3 text-emerald-400 font-bold tabular-nums">3.14p</td>
+                <td class="py-2 px-3 tabular-nums">2.74p</td>
+                <td class="py-2 px-3 text-red-400 font-bold tabular-nums">292.92p (~5h) ⚠️</td>
+                <td class="py-2 px-3 tabular-nums">44.4%</td>
+                <td class="py-2 px-3 tabular-nums">12.90%</td>
+              </tr>
+              <tr class="hover:bg-slate-800/30 bg-emerald-950/20 font-bold">
+                <td class="py-2 px-3 font-sans text-emerald-400">MQPSS (Đề Tài Đề Xuất)</td>
+                <td class="py-2 px-3 text-emerald-400 font-black tabular-nums">3.02p ⚡</td>
+                <td class="py-2 px-3 text-emerald-400 tabular-nums">2.63p</td>
+                <td class="py-2 px-3 text-amber-300 tabular-nums">197.63p</td>
+                <td class="py-2 px-3 text-emerald-400 tabular-nums">44.4% ✅</td>
+                <td class="py-2 px-3 text-emerald-400 font-black tabular-nums">12.52% (Thấp nhất)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- GENERATED SIMULATION CHARTS PREVIEW -->
+        <div class="pt-3 border-t border-slate-800">
+          <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2.5">Biểu Đồ Xuất Bản Khoa Học (Publication-Grade Figures):</span>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <a href="/simulations/benchmark_waiting_time_by_esi.png" target="_blank" class="bg-slate-950 border border-slate-800 rounded-lg p-2 hover:border-cyan-500/60 transition group cursor-pointer">
+              <img src="/simulations/benchmark_waiting_time_by_esi.png" alt="Biểu đồ thời gian chờ theo ESI" class="w-full h-32 object-cover rounded group-hover:opacity-90 transition">
+              <p class="text-[11px] text-slate-300 font-medium mt-1.5 text-center">1. Thời Gian Chờ Từng Cấp ESI</p>
+            </a>
+            <a href="/simulations/benchmark_starvation_rate.png" target="_blank" class="bg-slate-950 border border-slate-800 rounded-lg p-2 hover:border-cyan-500/60 transition group cursor-pointer">
+              <img src="/simulations/benchmark_starvation_rate.png" alt="Biểu đồ tỷ lệ đói starvation" class="w-full h-32 object-cover rounded group-hover:opacity-90 transition">
+              <p class="text-[11px] text-slate-300 font-medium mt-1.5 text-center">2. Tỷ Lệ Starvation ESI-1 & Toàn Viện</p>
+            </a>
+            <a href="/simulations/benchmark_summary_kpis.png" target="_blank" class="bg-slate-950 border border-slate-800 rounded-lg p-2 hover:border-cyan-500/60 transition group cursor-pointer">
+              <img src="/simulations/benchmark_summary_kpis.png" alt="Biểu đồ so sánh tổng thể KPI" class="w-full h-32 object-cover rounded group-hover:opacity-90 transition">
+              <p class="text-[11px] text-slate-300 font-medium mt-1.5 text-center">3. So Sánh Tổng Thể KPI</p>
+            </a>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- TAB 5: NHẬT KÝ ĐIỀU PHỐI (LIVE AUDIT FEED)                     -->
+    <!-- ============================================================ -->
+    <section id="view-audit" class="hidden space-y-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3 shadow-sm">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2.5">
+          <div>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center space-x-2">
+              <i data-lucide="terminal" class="w-4 h-4 text-cyan-400"></i>
+              <span>Nhật Ký Sự Kiện Điều Phối (Real-Time Audit Log)</span>
+            </h3>
+            <p class="text-xs text-slate-400">Lưu vết toàn bộ sự kiện: Tiếp nhận, Gợi ý AI, Preemption, Dynamic Aging, Phân bổ bác sĩ</p>
+          </div>
+          <button onclick="clearAuditLog()" class="px-2.5 py-1 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800 text-xs text-slate-400 hover:text-slate-200 cursor-pointer transition">
+            Xóa màn hình
+          </button>
+        </div>
+
+        <div id="audit-feed" class="space-y-1.5 max-h-[500px] overflow-y-auto custom-scroll pr-1 font-mono text-xs">
+          <!-- Injected via JS -->
+          <div class="text-slate-600 text-center py-8">Hệ thống đang hoạt động. Sự kiện điều phối sẽ hiển thị tại đây...</div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==================== MODAL: PATIENT CLINICAL DOSSIER INSPECTOR ==================== -->
+  <div id="patient-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-xl w-full p-5 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+      
+      <div class="flex items-start justify-between border-b border-slate-800 pb-2.5">
+        <div>
+          <div class="flex items-center space-x-2">
+            <h3 class="text-base font-bold text-slate-100" id="modal-patient-name">Nguyễn Văn A</h3>
+            <span id="modal-esi-badge" class="px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-orange-950 text-orange-300 border border-orange-800">ESI-2</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-0.5" id="modal-patient-sub">Mã: BN-001 | 56 tuổi | Nam</p>
+        </div>
+        <button onclick="closePatientModal()" class="p-1 rounded-md text-slate-400 hover:text-slate-100 hover:bg-slate-800 cursor-pointer transition" aria-label="Đóng cửa sổ">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- VITAL SIGNS GAUGE TILES -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800">
+          <span class="text-slate-500 text-[10px] block">MẠCH</span>
+          <span id="modal-hr" class="text-sm font-mono font-bold text-slate-100 tabular-nums">115 bpm</span>
+        </div>
+        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800">
+          <span class="text-slate-500 text-[10px] block">HUYẾT ÁP</span>
+          <span id="modal-bp" class="text-sm font-mono font-bold text-slate-100 tabular-nums">155/95 mmHg</span>
+        </div>
+        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800">
+          <span class="text-slate-500 text-[10px] block">SPO2</span>
+          <span id="modal-spo2" class="text-sm font-mono font-bold text-orange-400 tabular-nums">91.0 %</span>
+        </div>
+        <div class="bg-slate-950 p-2 rounded-lg border border-slate-800">
+          <span class="text-slate-500 text-[10px] block">NHỊP THỞ</span>
+          <span id="modal-rr" class="text-sm font-mono font-bold text-slate-100 tabular-nums">24 l/p</span>
+        </div>
+      </div>
+
+      <!-- CHIEF COMPLAINT -->
+      <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 text-xs space-y-1">
+        <span class="text-slate-400 font-bold uppercase tracking-wider text-[10px] block">Lý do vào viện & Triệu chứng:</span>
+        <p id="modal-complaint" class="text-slate-200">Đau tức ngực trái dữ dội lan vai, khó thở</p>
+      </div>
+
+      <!-- SCORE & TIMING -->
+      <div class="grid grid-cols-3 gap-2 text-xs">
+        <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+          <span class="text-slate-500 text-[10px] block">PRIORITY SCORE</span>
+          <span id="modal-score" class="text-sm font-mono font-bold text-amber-400 tabular-nums">74.5 / 100</span>
+        </div>
+        <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+          <span class="text-slate-500 text-[10px] block">THỜI GIAN ĐÃ CHỜ</span>
+          <span id="modal-wait" class="text-sm font-mono font-bold text-cyan-400 tabular-nums">12 phút</span>
+        </div>
+        <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+          <span class="text-slate-500 text-[10px] block">SỐ LẦN AGING</span>
+          <span id="modal-aged" class="text-sm font-mono font-bold text-slate-200 tabular-nums">0 lần</span>
+        </div>
+      </div>
+
+      <!-- EXPLANATIONS -->
+      <div class="border-t border-slate-800 pt-2.5">
+        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1.5">Giải Thích Quyết Định Phân Loại:</span>
+        <ul id="modal-explanations" class="text-xs text-slate-300 space-y-1 list-disc list-inside">
+          <!-- Injected via JS -->
+        </ul>
+      </div>
+
+      <div class="flex justify-end pt-2 border-t border-slate-800">
+        <button onclick="closePatientModal()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer transition">
+          Đóng
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== JAVASCRIPT APPLICATION LOGIC ==================== -->
+  <script>
+    let currentSnapshot = null;
+    let overrideEsiLevel = null;
+    let esiChart = null;
+    let docChart = null;
+    let soundEnabled = true;
+    let searchKeyword = '';
+    let starvationFilterActive = false;
+    let auditLogs = [];
+
+    // CLOCK
+    function updateClock() {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('vi-VN', { hour12: false });
+      const clockEl = document.getElementById('hospital-clock');
+      if (clockEl) clockEl.innerText = timeStr;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // AUDIO SYNTHESIZER (WEB AUDIO API)
+    let audioCtx = null;
+    function getAudioContext() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      return audioCtx;
+    }
+
+    function toggleSound() {
+      soundEnabled = !soundEnabled;
+      const icon = document.getElementById('sound-icon');
+      if (soundEnabled) {
+        icon.className = "w-4 h-4 text-emerald-400";
+        addAuditEntry("AUDIO", "Bật âm thanh còi báo động cấp cứu");
+      } else {
+        icon.className = "w-4 h-4 text-slate-500";
+        addAuditEntry("AUDIO", "Tắt âm thanh còi báo động");
+      }
+    }
+
+    function playAlarmChime() {
+      if (!soundEnabled) return;
+      try {
+        const ctx = getAudioContext();
+        if (ctx.state === 'suspended') ctx.resume();
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(880, now);
+        osc.frequency.exponentialRampToValueAtTime(1320, now + 0.15);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.3);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.35);
+      } catch (e) {
+        console.warn("Audio warning:", e);
+      }
+    }
+
+    // AUDIT LOG
+    function addAuditEntry(type, message) {
+      const time = new Date().toLocaleTimeString('vi-VN', { hour12: false });
+      auditLogs.unshift({ time, type, message });
+      if (auditLogs.length > 80) auditLogs.pop();
+      renderAuditLog();
+    }
+
+    function renderAuditLog() {
+      const feed = document.getElementById('audit-feed');
+      if (!feed) return;
+      if (auditLogs.length === 0) {
+        feed.innerHTML = '<div class="text-slate-600 text-center py-8">Hệ thống đang hoạt động. Sự kiện điều phối sẽ hiển thị tại đây...</div>';
+        return;
+      }
+      feed.innerHTML = auditLogs.map(log => {
+        let badgeColor = "bg-slate-800 text-slate-300";
+        if (log.type === 'EMERGENCY' || log.type === 'MCI') badgeColor = "bg-red-950 text-red-300 border border-red-800";
+        else if (log.type === 'AGING') badgeColor = "bg-amber-950 text-amber-300 border border-amber-800";
+        else if (log.type === 'DISPATCH') badgeColor = "bg-cyan-950 text-cyan-300 border border-cyan-800";
+        else if (log.type === 'FINISH') badgeColor = "bg-emerald-950 text-emerald-300 border border-emerald-800";
+        return `
+          <div class="flex items-center space-x-2 p-1.5 rounded bg-slate-950 border border-slate-800">
+            <span class="text-slate-500 text-[10px] tabular-nums">${log.time}</span>
+            <span class="px-1.5 py-0.2 rounded text-[10px] font-bold ${badgeColor}">[${log.type}]</span>
+            <span class="text-slate-300 flex-1">${log.message}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function clearAuditLog() {
+      auditLogs = [];
+      renderAuditLog();
+    }
+
+    // ECG TELEMETRY CANVAS
+    const ecgCanvas = document.getElementById('ecg-canvas');
+    const ecgCtx = ecgCanvas.getContext('2d');
+    let ecgX = 0;
+    let ecgStep = 0;
+    const ecgPattern = [10, 10, 10, 9, 11, 10, 8, 12, 1, 18, 10, 10, 8, 10, 10];
+
+    function drawECG() {
+      ecgCtx.fillStyle = 'rgba(15, 23, 42, 0.25)';
+      ecgCtx.fillRect(0, 0, ecgCanvas.width, ecgCanvas.height);
+
+      ecgCtx.strokeStyle = '#10B981';
+      ecgCtx.lineWidth = 1.2;
+      ecgCtx.beginPath();
+      ecgCtx.moveTo(ecgX, ecgCanvas.height / 2);
+
+      const y = ecgPattern[ecgStep % ecgPattern.length];
+      ecgX = (ecgX + 2) % ecgCanvas.width;
+      ecgStep++;
+
+      ecgCtx.lineTo(ecgX, y);
+      ecgCtx.stroke();
+      requestAnimationFrame(drawECG);
+    }
+    requestAnimationFrame(drawECG);
+
+    // TAB SWITCHING
+    function switchTab(tabId) {
+      document.querySelectorAll('nav .nav-tab').forEach(b => {
+        b.classList.remove('bg-slate-800', 'text-white', 'shadow-sm');
+        b.classList.add('text-slate-400');
+      });
+      const activeBtn = document.getElementById('tab-btn-' + tabId);
+      if (activeBtn) {
+        activeBtn.classList.add('bg-slate-800', 'text-white', 'shadow-sm');
+        activeBtn.classList.remove('text-slate-400');
+      }
+
+      ['queues', 'doctors', 'intake', 'dashboard', 'audit'].forEach(id => {
+        const el = document.getElementById('view-' + id);
+        if (el) el.classList.add('hidden');
+      });
+      const targetEl = document.getElementById('view-' + tabId);
+      if (targetEl) targetEl.classList.remove('hidden');
+
+      if (tabId === 'dashboard') {
+        renderCharts();
+      }
+      lucide.createIcons();
+    }
+
+    // PRESETS
+    const PRESETS = {
+      1: { name: "Nguyễn Văn Hưng", age: 68, gender: "male", avpu: "U", complaint: "Đột ngột ngưng thở, bất tỉnh, tím tái toàn thân sau đau ngực", hr: 0, sbp: 40, dbp: 20, spo2: 50.0, rr: 0, temp: 35.8, pain: 0, comorb: "tim_mach, tang_huyet_ap" },
+      2: { name: "Trần Thị Lan", age: 72, gender: "female", avpu: "A", complaint: "Khó thở dữ dội, đau ngực trái lan vai, co kéo cơ hô hấp", hr: 128, sbp: 155, dbp: 95, spo2: 86.0, rr: 32, temp: 38.0, pain: 8, comorb: "copd, suy_tim" },
+      3: { name: "Võ Thanh Bình", age: 41, gender: "male", avpu: "A", complaint: "Đau quặn bụng quanh rốn chuyển hố chậu phải kèm sốt, nôn liên tục", hr: 92, sbp: 125, dbp: 80, spo2: 98.0, rr: 18, temp: 38.6, pain: 7, comorb: "viem_da_day" },
+      4: { name: "Đặng Tuấn Kiệt", age: 19, gender: "male", avpu: "A", complaint: "Gãy xương ngón trỏ tay phải sau tai nạn xe máy, đau nhức", hr: 78, sbp: 118, dbp: 75, spo2: 99.0, rr: 16, temp: 36.8, pain: 5, comorb: "" },
+      5: { name: "Ngô Văn Nam", age: 45, gender: "male", avpu: "A", complaint: "Hết thuốc huyết áp định kỳ, đến xin tái khám và cấp toa", hr: 72, sbp: 125, dbp: 80, spo2: 99.0, rr: 16, temp: 36.6, pain: 0, comorb: "tang_huyet_ap" }
+    };
+
+    function applyPreset(level) {
+      const p = PRESETS[level];
+      document.getElementById('inp-pid').value = "BN-2026-" + Math.floor(100 + Math.random() * 900);
+      document.getElementById('inp-name').value = p.name;
+      document.getElementById('inp-age').value = p.age;
+      document.getElementById('inp-gender').value = p.gender;
+      document.getElementById('inp-avpu').value = p.avpu;
+      document.getElementById('inp-complaint').value = p.complaint;
+      document.getElementById('inp-hr').value = p.hr;
+      document.getElementById('inp-sbp').value = p.sbp;
+      document.getElementById('inp-dbp').value = p.dbp;
+      document.getElementById('inp-spo2').value = p.spo2;
+      document.getElementById('inp-rr').value = p.rr;
+      document.getElementById('inp-temp').value = p.temp;
+      document.getElementById('inp-pain').value = p.pain;
+      document.getElementById('inp-comorb').value = p.comorb;
+      liveUpdateAIPreview();
+      addAuditEntry("PRESET", `Đã điền ca mẫu ESI-${level}: ${p.name}`);
+    }
+
+    // LIVE PREVIEW & SHOCK INDEX
+    function liveUpdateAIPreview() {
+      const avpu = document.getElementById('inp-avpu').value;
+      const spo2 = parseFloat(document.getElementById('inp-spo2').value) || 98.0;
+      const sbp = parseInt(document.getElementById('inp-sbp').value) || 120;
+      const hr = parseInt(document.getElementById('inp-hr').value) || 80;
+      const pain = parseInt(document.getElementById('inp-pain').value) || 0;
+      const complaint = (document.getElementById('inp-complaint').value || '').toLowerCase();
+
+      // Shock Index: HR / SBP
+      const shockIndex = sbp > 0 ? (hr / sbp).toFixed(2) : "N/A";
+      const siBadge = document.getElementById('badge-shock-index');
+      if (siBadge) {
+        if (shockIndex !== "N/A" && parseFloat(shockIndex) >= 1.0) {
+          siBadge.className = "text-[11px] font-mono px-2 py-0.5 rounded font-bold bg-red-950 text-red-300 border border-red-800";
+          siBadge.innerText = `Shock Index: ${shockIndex} (CẢNH BÁO SỐC)`;
+        } else if (shockIndex !== "N/A" && parseFloat(shockIndex) >= 0.9) {
+          siBadge.className = "text-[11px] font-mono px-2 py-0.5 rounded font-bold bg-amber-950 text-amber-300 border border-amber-800";
+          siBadge.innerText = `Shock Index: ${shockIndex} (Nguy cơ)`;
+        } else {
+          siBadge.className = "text-[11px] font-mono px-2 py-0.5 rounded font-bold bg-slate-950 text-slate-300 border border-slate-800";
+          siBadge.innerText = `Shock Index: ${shockIndex} (Bình thường)`;
+        }
+      }
+
+      // SpO2 warning card border
+      const warnSpo2 = document.getElementById('warn-spo2');
+      if (warnSpo2) {
+        warnSpo2.innerText = `${spo2}%`;
+        warnSpo2.className = spo2 < 90.0 ? "text-red-400 font-mono font-bold" : (spo2 < 94.0 ? "text-orange-400 font-mono font-bold" : "text-emerald-400 font-mono font-bold");
+      }
+
+      let esi = 3;
+      let title = "ESI LEVEL 3 (VÀNG)";
+      let sub = "Cấp Tính — Chờ tối đa < 60 phút";
+      let colorClass = "text-amber-400";
+      let borderClass = "border-amber-500/50";
+      let explanations = [];
+      let scoreEst = 55.0;
+
+      // Check ESI 1
+      if (avpu === 'U' || hr === 0 || sbp < 65 || complaint.includes('ngung tho') || complaint.includes('ngưng thở') || complaint.includes('ngưng tim')) {
+        esi = 1;
+        title = "ESI LEVEL 1 (ĐỎ)";
+        sub = "Nguy Kịch Tức Thì — Vào phòng hồi sức cấp cứu ngay (0 phút)";
+        colorClass = "text-red-400";
+        borderClass = "border-red-500/80 pulse-danger-border";
+        scoreEst = 95.0;
+        explanations.push("Dấu hiệu đe dọa tính mạng tức thì (Hôn mê / Ngưng thở / Trụy mạch)");
+      } else if (spo2 < 90.0 || (hr / Math.max(sbp, 1) >= 1.05) || hr > 140 || pain >= 8 || complaint.includes('dau nguc') || complaint.includes('đau ngực')) {
+        esi = 2;
+        title = "ESI LEVEL 2 (CAM)";
+        sub = "Rất Cấp Khẩn — Chờ tối đa < 15 phút";
+        colorClass = "text-orange-400";
+        borderClass = "border-orange-500/60";
+        scoreEst = 78.5;
+        if (spo2 < 90.0) explanations.push(`SpO2 tụt thấp (${spo2}%) < 90% cảnh báo suy hô hấp cấp`);
+        if (hr / Math.max(sbp, 1) >= 1.05) explanations.push(`Chỉ số sốc Shock Index cao (${(hr/sbp).toFixed(2)})`);
+        if (pain >= 8) explanations.push(`Thang điểm đau mức độ nặng (${pain}/10)`);
+        if (complaint.includes('nguc') || complaint.includes('ngực')) explanations.push("Nghi ngờ biến cố mạch vành cấp");
+      } else if (complaint.includes('gay') || complaint.includes('gãy') || complaint.includes('rach da') || complaint.includes('rách da') || pain >= 4) {
+        esi = 4;
+        title = "ESI LEVEL 4 (XANH)";
+        sub = "Ít Cấp — Dự kiến cần 1 xét nghiệm/thủ thuật";
+        colorClass = "text-emerald-400";
+        borderClass = "border-emerald-500/50";
+        scoreEst = 34.0;
+        explanations.push("Sinh hiệu ổn định, dự kiến chỉ cần 1 dịch vụ (X-quang hoặc khâu vết thương)");
+      } else if (pain <= 2 && !complaint.includes('sot') && !complaint.includes('sốt')) {
+        esi = 5;
+        title = "ESI LEVEL 5 (GHI)";
+        sub = "Không Cấp — Chuyển khám chuyên khoa ngoại trú";
+        colorClass = "text-slate-400";
+        borderClass = "border-slate-700";
+        scoreEst = 12.0;
+        explanations.push("Tình trạng nhẹ, hướng dẫn chuyển phòng khám ngoại trú (không chiếm giường cấp cứu)");
+      } else {
+        explanations.push("Cần thực hiện đa xét nghiệm (máu + chẩn đoán hình ảnh)");
+      }
+
+      const card = document.getElementById('triage-card');
+      if (card) card.className = `bg-slate-950 border rounded-lg p-4 space-y-3 ${borderClass}`;
+      document.getElementById('card-esi-title').innerHTML = title;
+      document.getElementById('card-esi-title').className = `text-xl font-extrabold ${colorClass} tracking-tight`;
+      document.getElementById('card-esi-sub').innerHTML = sub;
+      document.getElementById('preview-badge').innerText = `Gợi ý ESI-${esi}`;
+      document.getElementById('card-preview-score').innerText = `${scoreEst.toFixed(1)} / 100`;
+
+      const expList = document.getElementById('card-explanations');
+      if (expList) {
+        expList.innerHTML = explanations.map(e => `
+          <li class="flex items-start space-x-1.5 text-xs text-slate-300">
+            <span class="${colorClass} font-bold">•</span>
+            <span>${e}</span>
+          </li>
+        `).join('');
+      }
+    }
+
+    // SET OVERRIDE ESI
+    function setOverrideEsi(level) {
+      overrideEsiLevel = level;
+      for (let i = 1; i <= 5; i++) {
+        const btn = document.getElementById(`btn-ov-${i}`);
+        if (btn) {
+          if (i === level) {
+            btn.className = "py-1.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500 font-bold transition";
+          } else {
+            btn.className = "py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 transition";
+          }
+        }
+      }
+      addAuditEntry("OVERRIDE", `Điều dưỡng chọn mức ghi đè: ESI-${level}`);
+    }
+
+    // SUBMIT INTAKE
+    async function submitPatientIntake() {
+      const pid = document.getElementById('inp-pid').value.trim();
+      const name = document.getElementById('inp-name').value.trim();
+      if (!name) {
+        alert("Vui lòng nhập họ và tên bệnh nhân!");
+        return;
+      }
+      const age = parseInt(document.getElementById('inp-age').value) || 30;
+      const gender = document.getElementById('inp-gender').value;
+      const avpu = document.getElementById('inp-avpu').value;
+      const complaint = document.getElementById('inp-complaint').value;
+
+      const hr = parseInt(document.getElementById('inp-hr').value) || 80;
+      const sbp = parseInt(document.getElementById('inp-sbp').value) || 120;
+      const dbp = parseInt(document.getElementById('inp-dbp').value) || 80;
+      const spo2 = parseFloat(document.getElementById('inp-spo2').value) || 98.0;
+      const rr = parseInt(document.getElementById('inp-rr').value) || 18;
+      const temp = parseFloat(document.getElementById('inp-temp').value) || 37.0;
+      const pain = parseInt(document.getElementById('inp-pain').value) || 0;
+      const comorb = document.getElementById('inp-comorb').value.split(',').map(s => s.trim()).filter(Boolean);
+
+      const payload = {
+        patient_id: pid,
+        full_name: name,
+        age: age,
+        gender: gender,
+        consciousness: avpu,
+        chief_complaint: complaint,
+        vitals: { heart_rate: hr, systolic_bp: sbp, diastolic_bp: dbp, respiratory_rate: rr, spo2: spo2, temperature: temp, pain_scale: pain },
+        comorbidities: comorb,
+        estimated_burst_time_minutes: 25.0
+      };
+
+      try {
+        const res = await fetch('/api/v1/patients/intake', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+
+        if (data.status === 'SUCCESS') {
+          if (overrideEsiLevel) {
+            const reason = document.getElementById('override-reason').value || "Ghi đè lâm sàng theo đánh giá điều dưỡng";
+            await fetch('/api/v1/triage/override', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ patient_id: pid, new_esi_level: overrideEsiLevel, reason: reason, staff_name: "Điều Dưỡng Trưởng" })
+            });
+            addAuditEntry("OVERRIDE", `Xác nhận ghi đè ca ${pid} thành ESI-${overrideEsiLevel}`);
+            overrideEsiLevel = null;
+          }
+
+          if (data.patient.current_esi === 1) {
+            playAlarmChime();
+            addAuditEntry("EMERGENCY", `🚨 Ca nguy kịch ESI-1: ${name} (${pid})`);
+          } else {
+            addAuditEntry("INTAKE", `Tiếp nhận ${name} (${pid}) vào Queue ${data.patient.current_esi}`);
+          }
+
+          document.getElementById('inp-pid').value = "BN-2026-" + Math.floor(100 + Math.random() * 900);
+          switchTab('queues');
+        }
+      } catch (err) {
+        alert("Lỗi tiếp nhận: " + err.message);
+      }
+    }
+
+    // SEED DEMO
+    async function seedDemo() {
+      try {
+        const res = await fetch('/api/v1/demo/seed', { method: 'POST' });
+        const data = await res.json();
+        addAuditEntry("SEED", `Đã nạp ${data.count} ca lâm sàng mẫu vào hệ thống`);
+        switchTab('queues');
+      } catch (e) {
+        alert("Lỗi seed demo: " + e.message);
+      }
+    }
+
+    // MCI SURGE
+    async function triggerMCISurge() {
+      try {
+        const res = await fetch('/api/v1/simulation/mass-casualty-surge', { method: 'POST' });
+        const data = await res.json();
+        playAlarmChime();
+        addAuditEntry("MCI", `🚨 BÁO ĐỘNG THẢM HỌA: Tiếp nhận khẩn cấp ${data.admitted_count} ca đa chấn thương!`);
+        switchTab('queues');
+      } catch (e) {
+        alert("Lỗi mô phỏng MCI: " + e.message);
+      }
+    }
+
+    // FAST FORWARD
+    async function fastForwardTime(mins) {
+      try {
+        const res = await fetch(`/api/v1/simulation/fast-forward-time?minutes=${mins}`, { method: 'POST' });
+        const data = await res.json();
+        addAuditEntry("AGING", `⏩ Đã tua nhanh +${mins} phút. Đã thăng hạng ${data.promotions_count} ca.`);
+      } catch (e) {
+        alert("Lỗi tua thời gian: " + e.message);
+      }
+    }
+
+    // TRIGGER AGING
+    async function triggerAgingManually() {
+      try {
+        const res = await fetch('/api/v1/aging/trigger', { method: 'POST' });
+        const data = await res.json();
+        if (data.promotions_count > 0) {
+          addAuditEntry("AGING", `⚡ Dynamic Aging: Đã thăng hạng ${data.promotions_count} ca chờ vượt ngưỡng.`);
+        } else {
+          addAuditEntry("AGING", "⚡ Dynamic Aging: Không có ca nào vượt ngưỡng.");
+        }
+      } catch (e) {
+        alert("Lỗi quét aging: " + e.message);
+      }
+    }
+
+    // RESET SYSTEM
+    async function resetSystem() {
+      if (!confirm("Bạn có chắc chắn muốn làm sạch toàn bộ hàng đợi và giải phóng bác sĩ?")) return;
+      try {
+        const res = await fetch('/api/v1/reset', { method: 'POST' });
+        await res.json();
+        addAuditEntry("SYSTEM", "Đã làm sạch toàn bộ hệ thống.");
+      } catch (e) {
+        alert("Lỗi reset: " + e.message);
+      }
+    }
+
+    // CALL NEXT
+    async function callNext(doctorId) {
+      try {
+        const res = await fetch(`/api/v1/doctors/${doctorId}/call-next`, { method: 'POST' });
+        const data = await res.json();
+        if (data.status === 'EMPTY') {
+          alert(data.message);
+        } else if (data.status === 'DISPATCHED') {
+          addAuditEntry("DISPATCH", `Bác sĩ ${doctorId} tiếp nhận bệnh nhân ${data.patient.full_name} (${data.patient.patient_id})`);
+        }
+      } catch (e) {
+        alert("Lỗi gọi bệnh nhân: " + e.message);
+      }
+    }
+
+    // FINISH TREATMENT
+    async function finishTreatment(patientId) {
+      try {
+        await fetch(`/api/v1/patients/${patientId}/finish`, { method: 'POST' });
+        addAuditEntry("FINISH", `Hoàn tất điều trị ca ${patientId}`);
+      } catch (e) {
+        alert("Lỗi hoàn tất: " + e.message);
+      }
+    }
+
+    // SEND TO LAB
+    async function sendToLab(patientId) {
+      try {
+        await fetch(`/api/v1/patients/${patientId}/send-to-lab`, { method: 'POST' });
+        addAuditEntry("LAB", `Chuyển ca ${patientId} sang cận lâm sàng (I/O Wait)`);
+      } catch (e) {
+        alert("Lỗi chuyển CLS: " + e.message);
+      }
+    }
+
+    // LAB RETURN
+    async function labReturn(patientId) {
+      try {
+        await fetch(`/api/v1/patients/${patientId}/lab-return`, { method: 'POST' });
+        addAuditEntry("LAB", `Có KQ xét nghiệm cho ca ${patientId} -> Trở lại Queue 2`);
+      } catch (e) {
+        alert("Lỗi trả kết quả CLS: " + e.message);
+      }
+    }
+
+    // FILTER QUEUES
+    function filterQueues() {
+      searchKeyword = document.getElementById('queue-search').value.toLowerCase();
+      if (currentSnapshot) updateUI(currentSnapshot);
+    }
+
+    function filterStarvationOnly() {
+      starvationFilterActive = !starvationFilterActive;
+      const btn = document.getElementById('btn-starv-filter');
+      if (starvationFilterActive) {
+        btn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-950 text-amber-300 border border-amber-600 cursor-pointer transition flex items-center space-x-1.5";
+      } else {
+        btn.className = "px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 cursor-pointer transition flex items-center space-x-1.5";
+      }
+      if (currentSnapshot) updateUI(currentSnapshot);
+    }
+
+    // PATIENT MODAL INSPECTOR
+    function openPatientModal(patient) {
+      document.getElementById('modal-patient-name').innerText = patient.full_name;
+      document.getElementById('modal-patient-sub').innerText = `Mã: ${patient.patient_id} | ${patient.age} tuổi | Giới tính: ${patient.gender}`;
+      
+      const badge = document.getElementById('modal-esi-badge');
+      badge.innerText = `ESI-${patient.current_esi}`;
+      badge.className = `px-2 py-0.5 rounded text-[11px] font-bold font-mono ${
+        patient.current_esi === 1 ? 'bg-red-950 text-red-300 border border-red-800' :
+        patient.current_esi === 2 ? 'bg-orange-950 text-orange-300 border border-orange-800' :
+        patient.current_esi === 3 ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+        patient.current_esi === 4 ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+        'bg-slate-800 text-slate-300 border border-slate-700'
+      }`;
+
+      const v = patient.vitals;
+      document.getElementById('modal-hr').innerText = `${v.heart_rate} bpm`;
+      document.getElementById('modal-bp').innerText = `${v.systolic_bp}/${v.diastolic_bp} mmHg`;
+      document.getElementById('modal-spo2').innerText = `${v.spo2} %`;
+      document.getElementById('modal-rr').innerText = `${v.respiratory_rate} l/p`;
+      document.getElementById('modal-complaint').innerText = patient.chief_complaint;
+      document.getElementById('modal-score').innerText = `${patient.priority_score.toFixed(1)} / 100`;
+      document.getElementById('modal-wait').innerText = `${patient.waiting_time_minutes.toFixed(1)} phút`;
+      document.getElementById('modal-aged').innerText = `${patient.aged_count} lần`;
+
+      const exList = document.getElementById('modal-explanations');
+      const explanations = (patient.triage_info && patient.triage_info.explanations) || ["Chỉ định quy trình cấp cứu lâm sàng"];
+      exList.innerHTML = explanations.map(e => `<li>${e}</li>`).join('');
+
+      document.getElementById('patient-modal').classList.remove('hidden');
+    }
+
+    function closePatientModal() {
+      document.getElementById('patient-modal').classList.add('hidden');
+    }
+
+    function dismissEmergencyBanner() {
+      document.getElementById('emergency-banner').classList.add('hidden');
+    }
+
+    // UPDATE UI FROM BACKEND SNAPSHOT
+    function updateUI(snapshot) {
+      currentSnapshot = snapshot;
+      const stats = snapshot.stats;
+
+      document.getElementById('badge-total-waiting').innerText = stats.total_waiting;
+      document.getElementById('kpi-total-waiting').innerText = stats.total_waiting;
+      document.getElementById('kpi-ed-waiting').innerText = stats.queue_1_count + stats.queue_2_count + stats.queue_3_count + stats.queue_4_count;
+      document.getElementById('kpi-avg-wait').innerText = stats.avg_waiting_time_minutes.toFixed(1);
+      document.getElementById('kpi-doctors').innerText = `${stats.active_doctors}/${snapshot.doctors.length}`;
+      document.getElementById('kpi-starvation').innerText = stats.starvation_risk_count;
+
+      if (stats.starvation_risk_count > 0) {
+        document.getElementById('kpi-starvation').className = "text-xl font-extrabold text-amber-400 font-mono tabular-nums animate-pulse";
+      } else {
+        document.getElementById('kpi-starvation').className = "text-xl font-extrabold text-emerald-400 font-mono tabular-nums";
+      }
+
+      document.getElementById('q1-count').innerText = snapshot.queue_1.length;
+      document.getElementById('q2-count').innerText = snapshot.queue_2.length;
+      document.getElementById('q3-count').innerText = snapshot.queue_3.length;
+      document.getElementById('q4-count').innerText = snapshot.queue_4.length;
+      document.getElementById('q5-count').innerText = snapshot.queue_5.length;
+
+      // Filter patients
+      const filterFn = (p) => {
+        const matchesSearch = !searchKeyword || p.full_name.toLowerCase().includes(searchKeyword) || p.patient_id.toLowerCase().includes(searchKeyword);
+        const matchesStarv = !starvationFilterActive || (p.current_esi === 3 && p.waiting_time_minutes > 40) || (p.current_esi === 4 && p.waiting_time_minutes > 80);
+        return matchesSearch && matchesStarv;
+      };
+
+      renderQueueColumn('q1-list', snapshot.queue_1.filter(filterFn), 'border-red-900/50 bg-slate-950 text-red-200');
+      renderQueueColumn('q2-list', snapshot.queue_2.filter(filterFn), 'border-orange-900/50 bg-slate-950 text-orange-200');
+      renderQueueColumn('q3-list', snapshot.queue_3.filter(filterFn), 'border-amber-900/50 bg-slate-950 text-amber-200');
+      renderQueueColumn('q4-list', snapshot.queue_4.filter(filterFn), 'border-emerald-900/50 bg-slate-950 text-emerald-200');
+      renderQueueColumn('q5-list', snapshot.queue_5.filter(filterFn), 'border-slate-800 bg-slate-950 text-slate-300');
+
+      renderDoctors(snapshot.doctors, snapshot.active_treatments);
+      renderLabWait(snapshot.lab_wait);
+
+      if (!document.getElementById('view-dashboard').classList.contains('hidden')) {
+        renderCharts();
+      }
+
+      lucide.createIcons();
+    }
+
+    function renderQueueColumn(elemId, patients, colorClass) {
+      const el = document.getElementById(elemId);
+      if (!patients || patients.length === 0) {
+        el.innerHTML = '<div class="text-xs text-slate-600 text-center py-12">Hàng đợi trống</div>';
+        return;
+      }
+      el.innerHTML = patients.map(p => `
+        <div onclick='openPatientModal(${JSON.stringify(p)})' class="border rounded-lg p-3 space-y-2 ${colorClass} cursor-pointer transition hover:border-slate-500 shadow-sm">
+          <div class="flex justify-between items-start">
+            <div>
+              <span class="text-[10px] font-mono text-slate-500 block">${p.patient_id}</span>
+              <h4 class="text-xs font-bold text-slate-100">${p.full_name} (${p.age}t)</h4>
+            </div>
+            <span class="text-[10px] px-1.5 py-0.2 rounded font-mono font-bold bg-slate-900 text-amber-300 border border-slate-800 tabular-nums">
+              ${p.priority_score.toFixed(1)}
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-300 line-clamp-2 leading-relaxed">${p.chief_complaint}</p>
+          <div class="flex items-center justify-between text-[10px] text-slate-400 border-t border-slate-800/80 pt-1.5 font-mono">
+            <span class="flex items-center space-x-1 tabular-nums">
+              <i data-lucide="clock" class="w-3 h-3 text-slate-500"></i>
+              <span>${p.waiting_time_minutes.toFixed(0)}p</span>
+            </span>
+            ${p.aged_count > 0 ? `<span class="bg-amber-950 text-amber-300 border border-amber-800 px-1 rounded text-[9px] font-bold">+${p.aged_count} Aging</span>` : ''}
+            <span class="tabular-nums">SpO2: ${p.vitals.spo2}%</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderDoctors(doctors, activeTreatments) {
+      const container = document.getElementById('doctors-container');
+      const activeMap = {};
+      (activeTreatments || []).forEach(p => activeMap[p.patient_id] = p);
+
+      container.innerHTML = doctors.map(doc => {
+        const isBusy = doc.status === 'BUSY';
+        const currentPatient = doc.current_patient_id ? activeMap[doc.current_patient_id] : null;
+
+        return `
+          <div class="bg-slate-900 border ${isBusy ? 'border-amber-700/60' : 'border-slate-800'} rounded-xl p-4 flex flex-col justify-between space-y-3 shadow-sm">
+            <div>
+              <div class="flex justify-between items-start mb-2">
+                <div class="flex items-center space-x-2.5">
+                  <div class="w-8 h-8 rounded-lg ${isBusy ? 'bg-amber-950/80 text-amber-400 border border-amber-800' : 'bg-slate-800 text-slate-300 border border-slate-700'} flex items-center justify-center font-mono font-bold text-xs">
+                    ${doc.doctor_id}
+                  </div>
+                  <div>
+                    <h4 class="text-xs font-bold text-slate-100">${doc.full_name}</h4>
+                    <p class="text-[11px] text-slate-400">${doc.specialty}</p>
+                  </div>
+                </div>
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold font-mono ${isBusy ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'bg-emerald-950 text-emerald-300 border border-emerald-800'}">
+                  ${isBusy ? 'ĐANG KHÁM' : 'SẴN SÀNG'}
+                </span>
+              </div>
+
+              ${currentPatient ? `
+                <div class="bg-slate-950 border border-slate-800 rounded-lg p-3 my-2 space-y-2">
+                  <div class="flex justify-between items-center text-xs">
+                    <span class="font-bold text-amber-300">${currentPatient.full_name}</span>
+                    <span class="px-1.5 py-0.2 rounded text-[10px] font-bold font-mono bg-red-950 text-red-300 border border-red-800">ESI-${currentPatient.current_esi}</span>
+                  </div>
+                  <p class="text-[11px] text-slate-300">${currentPatient.chief_complaint}</p>
+                  <div class="text-[10px] text-slate-400 grid grid-cols-3 gap-1 pt-1 border-t border-slate-800 font-mono tabular-nums">
+                    <span>HA: ${currentPatient.vitals.systolic_bp}/${currentPatient.vitals.diastolic_bp}</span>
+                    <span>HR: ${currentPatient.vitals.heart_rate}</span>
+                    <span>SpO2: ${currentPatient.vitals.spo2}%</span>
+                  </div>
+                  <div class="flex space-x-1.5 pt-1">
+                    <button onclick="sendToLab('${currentPatient.patient_id}')" class="flex-1 bg-purple-950/60 hover:bg-purple-900 text-purple-300 text-[11px] py-1.5 rounded border border-purple-800/80 cursor-pointer font-semibold transition" aria-label="Chỉ định CLS">
+                      Chỉ định CLS
+                    </button>
+                    <button onclick="finishTreatment('${currentPatient.patient_id}')" class="flex-1 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 text-[11px] py-1.5 rounded font-bold cursor-pointer transition" aria-label="Hoàn tất ca">
+                      Hoàn Tất Ca
+                    </button>
+                  </div>
+                </div>
+              ` : `
+                <div class="text-center py-6 text-xs text-slate-500 border border-dashed border-slate-800 rounded-lg my-2">
+                  Sẵn sàng nhận bệnh nhân tiếp theo
+                </div>
+              `}
+            </div>
+
+            <div class="pt-2.5 border-t border-slate-800 flex justify-between items-center text-xs">
+              <span class="text-slate-400">Đã khám: <strong class="text-slate-100 font-mono tabular-nums">${doc.patients_treated_count}</strong> ca</span>
+              ${!isBusy ? `
+                <button onclick="callNext('${doc.doctor_id}')" class="bg-cyan-600 hover:bg-cyan-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition flex items-center space-x-1 cursor-pointer shadow">
+                  <i data-lucide="bell" class="w-3.5 h-3.5"></i>
+                  <span>Gọi Ca Kế Tiếp</span>
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderLabWait(labPatients) {
+      const container = document.getElementById('lab-list');
+      document.getElementById('lab-count').innerText = `${(labPatients || []).length} ca`;
+
+      if (!labPatients || labPatients.length === 0) {
+        container.innerHTML = '<div class="text-xs text-slate-500 py-6 col-span-3 text-center">Không có bệnh nhân nào đang chờ kết quả xét nghiệm</div>';
+        return;
+      }
+
+      container.innerHTML = labPatients.map(p => `
+        <div class="bg-slate-950 border border-purple-900/50 rounded-lg p-3 flex justify-between items-center">
+          <div>
+            <h4 class="text-xs font-bold text-purple-200">${p.full_name} (${p.patient_id})</h4>
+            <p class="text-[11px] text-slate-400">${p.chief_complaint}</p>
+          </div>
+          <button onclick="labReturn('${p.patient_id}')" class="bg-purple-950 hover:bg-purple-900 border border-purple-700 text-purple-200 text-xs font-bold px-2.5 py-1 rounded cursor-pointer transition" aria-label="Trả kết quả CLS">
+            Trả KQ (Về Q2)
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function renderCharts() {
+      if (!currentSnapshot) return;
+      const ctxEsi = document.getElementById('chart-esi-dist');
+      const ctxDoc = document.getElementById('chart-doc-workload');
+
+      const esiCounts = [
+        currentSnapshot.queue_1.length,
+        currentSnapshot.queue_2.length,
+        currentSnapshot.queue_3.length,
+        currentSnapshot.queue_4.length,
+        currentSnapshot.queue_5.length
+      ];
+
+      if (esiChart) esiChart.destroy();
+      esiChart = new Chart(ctxEsi, {
+        type: 'doughnut',
+        data: {
+          labels: ['ESI-1 (Đỏ)', 'ESI-2 (Cam)', 'ESI-3 (Vàng)', 'ESI-4 (Xanh)', 'ESI-5 (Ghi)'],
+          datasets: [{
+            data: esiCounts,
+            backgroundColor: ['#EF4444', '#F97316', '#F59E0B', '#10B981', '#64748B'],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { color: '#94A3B8', font: { size: 11, family: 'Inter' } } }
+          }
+        }
+      });
+
+      const docLabels = currentSnapshot.doctors.map(d => d.full_name.split(' ').slice(-2).join(' '));
+      const docTreated = currentSnapshot.doctors.map(d => d.patients_treated_count);
+
+      if (docChart) docChart.destroy();
+      docChart = new Chart(ctxDoc, {
+        type: 'bar',
+        data: {
+          labels: docLabels,
+          datasets: [{
+            label: 'Số ca đã khám xong',
+            data: docTreated,
+            backgroundColor: '#0284C7',
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: { beginAtZero: true, grid: { color: '#1E293B' }, ticks: { color: '#94A3B8', font: { family: 'JetBrains Mono' } } },
+            x: { grid: { display: false }, ticks: { color: '#94A3B8', font: { family: 'Inter' } } }
+          },
+          plugins: {
+            legend: { display: false }
+          }
+        }
+      });
+    }
+
+    // CONNECT WEBSOCKET
+    function connectWS() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws`;
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        document.getElementById('ws-status-text').innerText = "LIVE";
+        document.getElementById('ws-badge').className = "flex items-center space-x-1 px-2 py-1 bg-slate-950 border border-slate-800 rounded-lg text-[10px] font-mono text-emerald-400";
+        addAuditEntry("WS", "Đã kết nối máy chủ WebSocket thời gian thực");
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.event === 'INITIAL_STATE' || (msg.data && msg.data.snapshot)) {
+            updateUI(msg.data.snapshot);
+          }
+          if (msg.event === 'EMERGENCY_ALARM_ESI1') {
+            document.getElementById('emergency-banner').classList.remove('hidden');
+            playAlarmChime();
+            addAuditEntry("EMERGENCY", "🚨 Kích hoạt Preemption: Bác sĩ được ngắt phiên để cấp cứu ca ESI-1!");
+          }
+          if (msg.event === 'AGING_PROMOTIONS') {
+            addAuditEntry("AGING", `Đã thăng hạng ${msg.data.promotions.length} ca chờ quá hạn.`);
+          }
+          if (msg.event === 'TIME_FAST_FORWARDED') {
+            addAuditEntry("TIME", `Tua nhanh +${msg.data.minutes} phút mô phỏng.`);
+          }
+        } catch (e) {
+          console.error("WS parse error:", e);
+        }
+      };
+
+      ws.onclose = () => {
+        document.getElementById('ws-status-text').innerText = "OFFLINE";
+        document.getElementById('ws-badge').className = "flex items-center space-x-1 px-2 py-1 bg-slate-950 border border-slate-800 rounded-lg text-[10px] font-mono text-red-400";
+        setTimeout(connectWS, 3000);
+      };
+    }
+
+    // KEYBOARD SHORTCUTS
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key === 'Enter') {
+        submitPatientIntake();
+      }
+      if (e.key === 'Escape') {
+        closePatientModal();
+      }
+    });
+
+    async function init() {
+      try {
+        const res = await fetch('/api/v1/queues');
+        const data = await res.json();
+        updateUI(data);
+      } catch (e) {
+        console.warn("Init fetch warning:", e);
+      }
+      connectWS();
+      liveUpdateAIPreview();
+      lucide.createIcons();
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
